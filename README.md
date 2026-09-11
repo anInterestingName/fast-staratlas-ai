@@ -15,6 +15,7 @@ uv run fastapi dev
 - 交互文档：http://localhost:8000/docs
 - 健康检查：http://localhost:8000/health
 - Demo 接口：http://localhost:8000/api/v1/demo
+- LLM 档案列表：http://localhost:8000/api/v1/llm/profiles
 
 部署到 FastAPI Cloud：
 
@@ -33,6 +34,11 @@ uv run fastapi deploy
 | `GET` | `/api/v1/demo` | 列出 demo 条目，支持 `q` 关键字过滤 |
 | `GET` | `/api/v1/demo/{item_id}` | 按 ID 查询 |
 | `POST` | `/api/v1/demo` | 创建 demo 条目 |
+| `GET` | `/api/v1/llm/profiles` | 列出模型档案（不含密钥） |
+| `POST` | `/api/v1/llm/chat` | 同步对话，按档案名调用 |
+| `POST` | `/api/v1/llm/chat/stream` | SSE 流式对话 |
+
+LLM 密钥通过环境变量配置，未配置时服务仍可启动，`/`、`/health` 和 Demo 不受影响。调用方只传档案名和消息，不能覆盖模型名、地址或密钥。
 
 创建示例：
 
@@ -51,6 +57,7 @@ app/
   api/router.py        # 路由汇总
   api/routes/          # 业务路由
   schemas/             # Pydantic 模型
+  llm/                 # LLM 配置、工厂与编排
 tests/                 # pytest
 ```
 
