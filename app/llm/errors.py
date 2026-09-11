@@ -1,21 +1,43 @@
-class LLMError(Exception):
-    def __init__(self, code: str, message: str, status_code: int) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.status_code = status_code
+from app.core.errors import AppError
 
 
-class ProfileNotFoundError(LLMError):
+class LLMError(AppError):
+    """LLM 领域错误。"""
+
+    def __init__(self, code: str, message: str, status_code: int, config: str | None = None) -> None:
+        super().__init__(code, message, status_code)
+        self.config = config
+        self.profile = config
+
+
+class ConfigNotFoundError(LLMError):
     def __init__(self, name: str) -> None:
-        super().__init__("profile_not_found", f"模型档案不存在: {name}", 404)
-        self.profile = name
+        super().__init__("config_not_found", f"模型配置不存在: {name}", 404, name)
 
 
-class ProfileNotReadyError(LLMError):
+class ConfigNotReadyError(LLMError):
     def __init__(self, name: str) -> None:
-        super().__init__("profile_not_ready", f"模型档案未就绪: {name}", 503)
-        self.profile = name
+        super().__init__("config_not_ready", f"模型配置未就绪: {name}", 503, name)
+
+
+class ConfigExistsError(LLMError):
+    def __init__(self, name: str) -> None:
+        super().__init__("config_exists", f"模型配置已存在: {name}", 409, name)
+
+
+class ConfigInvalidError(LLMError):
+    def __init__(self, message: str) -> None:
+        super().__init__("config_invalid", message, 500)
+
+
+class ApiMismatchError(LLMError):
+    def __init__(self, message: str) -> None:
+        super().__init__("api_mismatch", message, 422)
+
+
+class ProtocolNotSupportedError(LLMError):
+    def __init__(self, name: str, protocol: str) -> None:
+        super().__init__("protocol_not_supported", f"协议暂不支持调用: {protocol}", 503, name)
 
 
 class LLMValidationError(LLMError):

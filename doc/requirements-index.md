@@ -15,7 +15,7 @@
 
 | 年份 | 下一个编号 | 最后分配日期 | 维护人 |
 | --- | --- | --- | --- |
-| 2026 | `REQ-2026-002` | 2026-09-11 | 待指定 |
+| 2026 | `REQ-2026-005` | 2026-09-11 | 待指定 |
 
 > 分配编号后立即将“下一个编号”加一。
 
@@ -23,7 +23,10 @@
 
 | 需求编号 | 需求名称 | 模块 | 版本 | 状态 | 需求文档 | 数据库设计 | 详细设计 | 测试文档 | 负责人 | 最后更新 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| REQ-2026-001 | LLM 接入与编排基础能力 | llm | 0.6 | 开发中 | [REQ-2026-001-llm-access-orchestration.md](requirements/REQ-2026-001-llm-access-orchestration.md) | 不涉及（本迭代不建配置表；后续落库单独立项） | [DESIGN-REQ-2026-001-llm-access-orchestration.md](design/DESIGN-REQ-2026-001-llm-access-orchestration.md) | [TEST-REQ-2026-001-llm-access-orchestration.md](test/TEST-REQ-2026-001-llm-access-orchestration.md) | 待指定 | 2026-09-11 |
+| REQ-2026-001 | LLM 接入与编排基础能力 | llm | 0.9 | 开发中 | [REQ-2026-001-llm-access-orchestration.md](requirements/REQ-2026-001-llm-access-orchestration.md) | 不涉及（本迭代不建配置表；后续落库单独立项） | [DESIGN-REQ-2026-001-llm-access-orchestration.md](design/DESIGN-REQ-2026-001-llm-access-orchestration.md) | [TEST-REQ-2026-001-llm-access-orchestration.md](test/TEST-REQ-2026-001-llm-access-orchestration.md) | 待指定 | 2026-09-11 |
+| REQ-2026-002 | PostgreSQL 接入 | db | 0.2 | 开发中 | [REQ-2026-002-postgresql-access.md](requirements/REQ-2026-002-postgresql-access.md) | [DB-REQ-2026-002-postgresql-access.md](database/DB-REQ-2026-002-postgresql-access.md)（本迭代无业务表） | [DESIGN-REQ-2026-002-postgresql-access.md](design/DESIGN-REQ-2026-002-postgresql-access.md) | [TEST-REQ-2026-002-postgresql-access.md](test/TEST-REQ-2026-002-postgresql-access.md) | 待指定 | 2026-09-11 |
+| REQ-2026-003 | FastAPI 工程基线（Ruff、异常出口、日志） | core | 0.4 | 开发中 | [REQ-2026-003-engineering-baseline.md](requirements/REQ-2026-003-engineering-baseline.md) | 不涉及 | [DESIGN-REQ-2026-003-engineering-baseline.md](design/DESIGN-REQ-2026-003-engineering-baseline.md) | [TEST-REQ-2026-003-engineering-baseline.md](test/TEST-REQ-2026-003-engineering-baseline.md) | 待指定 | 2026-09-11 |
+| REQ-2026-004 | LLM 完整配置项与文件 CRUD | llm | 0.1 | 开发中 | [REQ-2026-004-llm-config-store.md](requirements/REQ-2026-004-llm-config-store.md) | 不涉及（YAML 文件，不建表） | [DESIGN-REQ-2026-004-llm-config-store.md](design/DESIGN-REQ-2026-004-llm-config-store.md) | [TEST-REQ-2026-004-llm-config-store.md](test/TEST-REQ-2026-004-llm-config-store.md) | 待指定 | 2026-09-11 |
 
 ## 状态说明
 

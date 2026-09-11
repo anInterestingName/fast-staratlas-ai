@@ -2,16 +2,16 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.llm.config_provider import LLMConfigProvider, SettingsLLMConfigProvider
+from app.llm.config_provider import FileLLMConfigProvider, LLMConfigProvider
 from app.llm.factory import ChatModelFactory, LangchainChatModelFactory
 from app.llm.orchestrator import ChatOrchestrator
 
-_settings_provider = SettingsLLMConfigProvider()
+_file_provider = FileLLMConfigProvider()
 _chat_model_factory = LangchainChatModelFactory()
 
 
 def get_config_provider() -> LLMConfigProvider:
-    return _settings_provider
+    return _file_provider
 
 
 def get_chat_model_factory() -> ChatModelFactory:

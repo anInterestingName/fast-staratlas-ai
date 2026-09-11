@@ -8,7 +8,7 @@
 | 关联需求 | [REQ-2026-001-llm-access-orchestration.md](../requirements/REQ-2026-001-llm-access-orchestration.md) |
 | 关联数据库设计 | 不涉及 |
 | 关联测试文档 | [TEST-REQ-2026-001-llm-access-orchestration.md](../test/TEST-REQ-2026-001-llm-access-orchestration.md) |
-| 文档版本 | 0.2 |
+| 文档版本 | 0.4 |
 | 文档状态 | 开发中 |
 | 技术负责人 | 待指定 |
 | 创建/更新日期 | 2026-09-11 |
@@ -19,7 +19,7 @@
 
 1. 在 FastAPI 中增加独立的 LLM 配置访问边界、模型工厂和单步编排，调用方只按档案名使用模型。
 2. 提供档案列表、同步对话、SSE 流式对话三个 HTTP 接口；第一期用 OpenAI 兼容协议调用 GPT。
-3. 模型名、超时、消息上限等全部从配置读取；缺少密钥时服务仍可启动，现有 `/health` 与 Demo 不受影响。
+3. 模型名、超时、消息上限等全部从配置读取；缺少密钥时服务仍可启动，现有 `/health` 不受影响。
 4. 主档案上游失败后按配置尝试备用档案；全部失败返回明确错误，不把空文本当成功。
 
 ### 2.2 非目标
@@ -28,19 +28,19 @@
 - 不把配置接入数据库，不创建配置表，不提供档案写入 API。
 - 不提供结构化输出接口、多步 LangGraph、Agent、会话持久化。
 - 不实现登录、认证、权限、审计、脱敏。
-- 不修改 Demo 内存存储语义。
+- 不把 Demo 示例接口当作 LLM 存储；该接口由 REQ-2026-002 删除。
 
 ### 2.3 需求映射
 
 | 需求/验收标准 | 设计落点 | 验证方式 |
 | --- | --- | --- |
 | REQ-001 / AC-001 | `GET /api/v1/llm/profiles` + `SettingsLLMConfigProvider` | pytest：配置就绪档案后列表含 `smart` 且 `ready=true`，无密钥字段 |
-| REQ-001 / AC-002 | 档案 `api_key` 为空则 `ready=false` | pytest：缺密钥档案标记未就绪或不作为可调用项 |
+| REQ-001 / AC-002 | 档案 `key` 为空则 `ready=false` | pytest：缺密钥档案标记未就绪或不作为可调用项 |
 | REQ-001 / AC-003 | 启动不校验 LLM 密钥；`/health` 不依赖 LLM | pytest：无密钥时 health 仍 200 |
 | REQ-001 / AC-025 | `ChatOpenAI(model=profile.model)`，模型名只来自配置 | pytest：替换配置中的 model 后 fake 客户端收到新模型名 |
 | REQ-001 / AC-026 | 编排前按配置校验 `max_messages` | pytest：上限为 1 时两条消息返回 422 且不调用上游 |
 | REQ-002 / AC-004 | 请求体仅 `profile` + `messages` | pytest：成功响应无密钥 |
-| REQ-002 / AC-005 | `ChatRequest` `extra="forbid"` | pytest：携带 `api_key`/`model`/`base_url`/`provider` 返回 422 |
+| REQ-002 / AC-005 | `ChatRequest` `extra="forbid"` | pytest：携带 `api_key`/`model`/`key`/`url`/`think`/`think_level`/`provider` 返回 422 |
 | REQ-002 / AC-006 | 路由不出现供应商字段 | 静态检查 + pytest：只改配置不改路径 |
 | REQ-003 / AC-007 | `POST /api/v1/llm/chat` 省略 profile 用默认档案 | pytest：返回非空 `content` 和实际 `profile` |
 | REQ-003 / AC-008 | 请求 `profile=fast` | pytest：响应 `profile=fast` |
@@ -52,9 +52,9 @@
 | REQ-006 / AC-015 | `ChatOrchestrator` 按 fallbacks 顺序切换 | pytest：主档案失败、备用成功，响应档案为备用 |
 | REQ-006 / AC-016 | 全部失败 `LLMUpstreamError` → 503 | pytest：非 2xx，无空成功文本 |
 | REQ-006 / AC-017 | 校验失败不进入转移 | pytest：422 且上游次数为 0 |
-| REQ-007 / AC-018 | 组装时前置 `system_prompt` | pytest：fake 模型收到的首条为配置中的系统策略 |
+| REQ-007 / AC-018 | 组装时前置 `system` | pytest：fake 模型收到的首条为配置中的系统策略 |
 | REQ-007 / AC-019 | 不实现 | 不适用 |
-| REQ-008 / AC-020 | `ChatOpenAI(timeout=profile.timeout_seconds, max_retries=0)` | pytest：超时映射为上游失败 |
+| REQ-008 / AC-020 | `ChatOpenAI(timeout=profile.timeout, max_retries=0)` | pytest：超时映射为上游失败 |
 | REQ-008 / AC-021 | 空内容视为上游失败 | pytest：空 content 不返回 200 成功 |
 | REQ-009 / AC-022 | 响应模型不含密钥字段 | pytest 断言响应 JSON |
 | REQ-009 / AC-023 | 日志只记档案名和错误类型 | 代码审查 + 单测补丁 logger |
@@ -62,6 +62,8 @@
 | REQ-010 / AC-027 | 无表、无档案 CRUD 路由 | 静态检查路由与 `doc/sql` |
 | REQ-010 / AC-028 | Settings 中 GPT 档案 + 有效密钥可对话 | 隔离 fake 上游 pytest；真实 GPT 为手工联调 |
 | REQ-010 / AC-029 | HTTP 契约无 `source=env/db` 字段 | pytest 响应字段白名单 |
+| REQ-001 / AC-030 | `think=true` → `ChatOpenAI(reasoning_effort=think_level)`；请求禁止覆盖 | pytest：工厂参数与 extra=forbid |
+| REQ-001 / AC-031 | `think=false` 且 level≠none 时不传 `reasoning_effort` | pytest：非推理档案 `reasoning_effort is None` |
 
 ## 3. 改动范围
 
@@ -72,7 +74,7 @@
 | Schema | `app/schemas/llm.py` | 档案列表、对话请求/响应、用量、错误体 |
 | 配置 | `app/core/config.py`、`.env.example` | 增加嵌套 `llm` 配置；`env_nested_delimiter="__"` |
 | LLM 内核 | `app/llm/` | 配置提供者、工厂、编排、领域错误 |
-| 数据 | 不涉及 | 不落库、不改 Demo 内存存储 |
+| 数据 | 不涉及 | 不落库 |
 | 依赖 | `pyproject.toml` | 增加 `langchain-core`、`langchain-openai` |
 | 测试 | `tests/test_llm.py`、`tests/conftest.py` | TestClient + 可注入的 fake 配置/模型 |
 | 调用方 | 新接口 | 旧接口保持兼容 |
@@ -86,7 +88,6 @@ flowchart LR
     Client[调用方] --> FastAPI[FastAPI App]
     FastAPI --> Router[api/router]
     Router --> Health[routes/health]
-    Router --> Demo[routes/demo]
     Router --> LLMRoute[routes/llm]
     LLMRoute --> Schema[schemas/llm]
     LLMRoute --> Orch[llm/orchestrator]
@@ -148,7 +149,7 @@ SSE 流式：校验与档案解析同同步；成功进入生成后 `astream`，
 
 1. 路由用 Schema 校验；多余字段（密钥、模型名、地址、供应商）直接 422，不调用编排。
 2. 编排器向 ConfigProvider 取档案视图；不存在则 404，未就绪则 503，二者都不走备用链。
-3. 用全局/档案上限校验消息；通过后把配置中的 `system_prompt` 插到消息最前，再调用工厂创建的 Chat Model。
+3. 用全局/档案上限校验消息；通过后把配置中的 `system` 插到消息最前，再调用工厂创建的 Chat Model。
 4. 上游失败才按 `fallbacks` 尝试下一个已就绪档案；成功解析 `AIMessage.content` 为字符串返回。空内容按上游失败处理。
 
 ## 5. 模块设计
@@ -167,7 +168,7 @@ SSE 流式：校验与档案解析同同步；成功进入生成后 `astream`，
 | 响应 | `LLMProfileListResponse` | `total`、`items` |
 | 响应 | `LLMErrorBody` | `code`、`message`，用于 404/503 的 `detail` |
 
-`LLMProfileItem` 不含 `api_key`、`base_url`、`provider`、存储来源。
+`LLMProfileItem` 不含 `key`、`url`、`provider`、`think`、`think_level`、存储来源。
 
 ### 5.2 路由与处理
 
@@ -193,17 +194,17 @@ api_router.include_router(llm.router, prefix=settings.api_v1_prefix)
 
 | 规则 | 实现位置 | 失败行为 |
 | --- | --- | --- |
-| 只接受档案名，禁止请求覆盖供应商/密钥/模型/地址 | `ChatRequest` extra=forbid | 422，不调用上游 |
+| 只接受档案名，禁止请求覆盖供应商/密钥/模型/地址/思考参数 | `ChatRequest` extra=forbid | 422，不调用上游 |
 | 档案不存在 | Orchestrator | 404 `profile_not_found`，不转移 |
-| 档案未就绪（无密钥、模型名为空、非 `openai_compat`） | Orchestrator | 503 `profile_not_ready`，不转移 |
+| 档案未就绪（无密钥、模型名为空） | Orchestrator | 503 `profile_not_ready`，不转移 |
 | 消息条数/长度超配置上限 | Orchestrator，在调用上游前 | 422，不转移 |
-| 服务端系统提示必须前置，且不可被请求关闭 | Orchestrator | 始终插入 `system_prompt` |
+| 服务端系统提示必须前置，且不可被请求关闭 | Orchestrator | 始终插入 `system` |
 | 上游超时/4xx/5xx/空内容 | Orchestrator | 尝试下一个已就绪备用；耗尽则 503 |
 | 备用链只来自配置 | Settings `llm.fallbacks` | 请求体无 fallback 字段 |
 | SDK 重试关闭 | factory `max_retries=0` | 避免与档案转移叠加等待 |
 | 配置不入库 | 仅 Settings Provider | 无 CRUD、无 SQL |
 
-内部档案模型（不对外）建议字段与需求配置表对齐：`name`、`provider`、`model`、`base_url`、`api_key`、`timeout_seconds`、`temperature`、`max_messages`、`max_content_length`。公开视图去掉密钥和地址。
+内部档案模型（不对外）字段：`name`、`provider`（固定 `openai_compat`）、`model`、`url`、`key`、`timeout`、`temperature`、`think`、`think_level`、`max_messages`、`max_length`。公开视图去掉密钥、地址、协议和思考参数。
 
 ## 6. HTTP API 契约
 
@@ -215,10 +216,10 @@ api_router.include_router(llm.router, prefix=settings.api_v1_prefix)
 
 接口补充：
 
-- 参数位置：全部 JSON Body；无 Query 覆盖模型。`profile` 省略时用 `llm.default_profile`。
+- 参数位置：全部 JSON Body；无 Query 覆盖模型。`profile` 省略时用 `llm.default`。
 - `ChatRequest.messages` 至少 1 条；`role` 仅 `user` / `assistant` / `system`；`content` 去空白后不得为空。
 - 条数上限、单条长度上限取「档案值优先，否则全局值」。流式与同步同一套校验。
-- 兼容策略：纯新增接口；`/`、`/health`、`/api/v1/demo` 不变。
+- 兼容策略：纯新增接口；`/`、`/health` 不变。`/api/v1/demo` 由 REQ-2026-002 删除。
 - 敏感字段：响应与 SSE 均不得出现密钥、鉴权头、`base_url`。日志只记档案名、错误码、时延、用量。
 - 无存储来源字段，无为落库预留的空列。
 
@@ -285,9 +286,10 @@ data: {"code":"upstream_failed","message":"上游调用失败"}
 
 | 项目 | 内容 |
 | --- | --- |
-| 目标服务 | OpenAI 兼容 Chat Completions，第一期为 GPT。`base_url` 可配，默认官方兼容地址 |
+| 目标服务 | OpenAI 兼容 Chat Completions，第一期为 GPT。`url` 可配，默认官方兼容地址 |
 | 客户端位置 | `app/llm/factory.py` 创建 `langchain_openai.ChatOpenAI`；编排只依赖 `BaseChatModel` |
-| 超时与重试 | 超时 = 档案 `timeout_seconds`（缺省 60）；`max_retries=0`；档案转移替代 SDK 重试 |
+| 超时与重试 | 超时 = 档案 `timeout`（缺省 60）；`max_retries=0`；档案转移替代 SDK 重试 |
+| 思考参数 | `think=true` 时传 `reasoning_effort=think_level`，且不传 `temperature`；`think=false` 且 `think_level=none` 时传 `reasoning_effort=none`；其余情况不传思考参数 |
 | 失败处理 | 捕获超时、HTTP 错误、空内容；进入备用链或最终 503。禁止 200 + 空字符串 |
 | 调用方处理 | 200 为成功；422 参数问题；404 档案不存在；503 未就绪或上游失败 |
 | 非目标 | LiteLLM、各厂商官方包、自建网关 |
@@ -300,7 +302,7 @@ data: {"code":"upstream_failed","message":"上游调用失败"}
 - 存储方式：模型档案来自进程内 Settings；对话不保存。
 - 持久化边界：重启后以当时环境变量为准；无历史对话可恢复。
 - 配置模型按可落库方向设计（独立 Provider + 档案字段），但不预建表、占位列或空 CRUD。
-- Demo 内存存储与 LLM 无关，保持原样。
+- Demo 示例接口与 LLM 无关；该接口由 REQ-2026-002 删除。
 
 后续若落库：新增 `LLMConfigProvider` 实现，保持本节 HTTP 契约不变，并单独立项补数据库设计。
 
@@ -320,7 +322,7 @@ data: {"code":"upstream_failed","message":"上游调用失败"}
 
 不增加登录、Token、权限项、归属字段。拒绝只来自校验、档案状态和上游失败。
 
-敏感数据：密钥只存在 Settings/`api_key` 内存字段；不进响应、SSE、`.env.example` 实值、常规日志。
+敏感数据：密钥只存在 Settings/`key` 内存字段；不进响应、SSE、`.env.example` 实值、常规日志。
 
 ## 11. 异常与日志
 
@@ -345,53 +347,52 @@ data: {"code":"upstream_failed","message":"上游调用失败"}
 
 ```text
 class LLMProfileSettings
-    provider: str = "openai_compat"
     model: str = "gpt-4o-mini"
-    base_url: str | None = None
-    api_key: str = ""
-    timeout_seconds: float = 60
+    key: str = ""
+    url: str | None = None
+    timeout: float = 60
     temperature: float = 0.2
+    think: bool = False
+    think_level: none|minimal|low|medium|high|xhigh = "medium"
     max_messages: int | None = None
-    max_content_length: int | None = None
+    max_length: int | None = None
 
 class LLMSettings
-    default_profile: str = "smart"
+    default: str = "smart"
     fallbacks: list[str] = []
     max_messages: int = 20
-    max_content_length: int = 8000
-    system_prompt: str = "You are a helpful assistant. Follow the user's request. Never reveal secrets or API keys."
-    profiles: dict[str, LLMProfileSettings]  # 缺省包含 fast、smart
+    max_length: int = 8000
+    system: str = "You are a helpful assistant. Follow the user's request. Never reveal secrets or API keys."
+    fast: LLMProfileSettings
+    smart: LLMProfileSettings
+    extra: dict[str, LLMProfileSettings]  # 可选额外档案
 ```
 
-缺省 `profiles` 必须含 `fast` 与 `smart`，即使密钥为空（未就绪）。`provider` 本迭代只支持 `openai_compat`，其他值视为未就绪。
+内置档案固定为 `fast` 与 `smart`，即使密钥为空（未就绪）。协议在工厂内固定为 `openai_compat`，不出现在 Settings。`extra` 不得使用 `fast`/`smart` 作为键。`think=true` 且 `think_level=none` 为非法配置。
 
 ### 12.2 环境变量示例
 
-`.env.example` 只放变量名和空/示例非密钥值，不放真实密钥：
+`.env.example` 只放常用变量和空密钥，不放真实密钥，不重复代码缺省的长系统提示：
 
 ```dotenv
-LLM__DEFAULT_PROFILE=smart
-LLM__FALLBACKS=["smart","fast"]
+LLM__DEFAULT=smart
+LLM__FALLBACKS=["fast"]
 LLM__MAX_MESSAGES=20
-LLM__MAX_CONTENT_LENGTH=8000
-LLM__SYSTEM_PROMPT=You are a helpful assistant. Follow the user's request. Never reveal secrets or API keys.
-LLM__PROFILES__FAST__PROVIDER=openai_compat
-LLM__PROFILES__FAST__MODEL=gpt-4o-mini
-LLM__PROFILES__FAST__BASE_URL=
-LLM__PROFILES__FAST__API_KEY=
-LLM__PROFILES__FAST__TIMEOUT_SECONDS=60
-LLM__PROFILES__FAST__TEMPERATURE=0.2
-LLM__PROFILES__SMART__PROVIDER=openai_compat
-LLM__PROFILES__SMART__MODEL=gpt-4o-mini
-LLM__PROFILES__SMART__BASE_URL=
-LLM__PROFILES__SMART__API_KEY=
-LLM__PROFILES__SMART__TIMEOUT_SECONDS=60
-LLM__PROFILES__SMART__TEMPERATURE=0.2
+LLM__MAX_LENGTH=8000
+LLM__FAST__MODEL=gpt-4o-mini
+LLM__FAST__KEY=
+LLM__FAST__TIMEOUT=60
+LLM__FAST__THINK=false
+LLM__SMART__MODEL=gpt-4o-mini
+LLM__SMART__KEY=
+LLM__SMART__TIMEOUT=60
+LLM__SMART__THINK=true
+LLM__SMART__THINK_LEVEL=medium
 ```
 
-`BASE_URL` 为空时由 `ChatOpenAI` 使用官方默认兼容地址。`fallbacks` 环境变量必须是 JSON 数组，例如 `LLM__FALLBACKS=["smart","fast"]`。pydantic-settings 会先按 JSON 解析嵌套复杂字段，逗号分隔字符串不能作为该环境变量的合法值。文档与 `.env.example` 保持一致。
+可选档案字段：`URL`、`TEMPERATURE`、`MAX_MESSAGES`、`MAX_LENGTH`。可选全局字段：`SYSTEM`。额外档案：`LLM__EXTRA__<NAME>__MODEL` 等。`URL` 为空时由 `ChatOpenAI` 使用官方默认兼容地址。`FALLBACKS` 必须是 JSON 数组。文档与 `.env.example` 保持一致。
 
-就绪判定：`api_key` 非空、`model` 非空、`provider=="openai_compat"`。
+就绪判定：`key` 非空、`model` 非空。
 
 ### 12.3 依赖
 
@@ -446,16 +447,18 @@ langchain-openai
 | --- | --- | --- | --- |
 | 2026-09-11 | 0.1 | 初稿。对应需求 v0.5：Settings 配置提供者、ChatOpenAI 工厂、同步/SSE 对话、档案失败转移；无库、无结构化接口、无认证。 | 待指定 |
 | 2026-09-11 | 0.2 | 记录实现完成范围、`fallbacks` JSON 环境变量结论、已执行隔离 pytest 与未执行真实 GPT 联调。 | 待指定 |
+| 2026-09-11 | 0.3 | 兼容说明去掉 Demo；该示例接口改由 REQ-2026-002 删除。 | 待指定 |
+| 2026-09-11 | 0.4 | 缩短 LLM 配置字段；`fast`/`smart` 提升为一级配置；新增 `think`/`think_level` 并映射 `reasoning_effort`。 | 待指定 |
 
 ## 15. 实现完成记录
 
 开发完成，待验收。
 
-- 实际完成范围：`Settings` 嵌套 `llm` 配置、`SettingsLLMConfigProvider`、`LangchainChatModelFactory`（`ChatOpenAI`，`max_retries=0`，按档案指纹缓存实例）、`ChatOrchestrator` 单步编排与备用转移、`GET /api/v1/llm/profiles`、`POST /api/v1/llm/chat`、`POST /api/v1/llm/chat/stream`、隔离 pytest。
+- 实际完成范围：`Settings` 嵌套 `llm` 配置（`fast`/`smart`/`extra` 短字段）、`SettingsLLMConfigProvider`、`LangchainChatModelFactory`（`ChatOpenAI`，`max_retries=0`，按档案指纹缓存实例，思考参数映射 `reasoning_effort`）、`ChatOrchestrator` 单步编排与备用转移、`GET /api/v1/llm/profiles`、`POST /api/v1/llm/chat`、`POST /api/v1/llm/chat/stream`、隔离 pytest。
 - 设计偏差：
   1. `LLM__FALLBACKS` 只接受 JSON 数组，不接受逗号分隔字符串（pydantic-settings 嵌套复杂类型先按 JSON 解码）。
   2. SSE 若已发出 `delta` 后上游失败，不再切换备用档案，避免把不同档案的增量拼进同一流；尚未发出增量时仍按备用链切换。
-- 已执行验证：`uv run pytest`，35 passed（含 Demo/health 回归与 LLM 隔离用例）。
+- 已执行验证：`uv run pytest`，40 passed（含 health 回归、LLM 隔离用例与思考参数映射）。
 - 未执行项：真实 GPT 同步/流式手工联调（TC-031）。
 - 环境限制：默认测试拦截真实模型工厂；无获准外部密钥与网络。
 - 待验收项：配置真实 `smart` 密钥后验证对话与 SSE；评审需求/设计确认。

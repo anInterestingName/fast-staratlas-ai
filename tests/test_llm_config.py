@@ -1,52 +1,134 @@
-import os
+from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.core.config import Settings
-from app.llm.config_provider import SettingsLLMConfigProvider
-from app.llm.factory import LangchainChatModelFactory
-from tests.llm_fakes import make_profile
+from app.llm.config_provider import FileLLMConfigProvider
+from app.llm.factory import LangchainChatModelFactory, reasoning_effort_for
+from app.llm.item import LLMConfigItem
+from app.llm.store import YamlConfigStore
+from tests.llm_fakes import make_config
+
+CONFIGS_PATH = "/api/v1/llm/configs"
+
+SAMPLE = {
+    "protocol": "openai",
+    "api": "chat",
+    "baseurl": "https://api.openai.com/v1",
+    "apikey": "secret-one",
+    "timeout": 60,
+    "model": "gpt-4o-mini",
+    "stream": False,
+    "think": False,
+}
 
 
-@pytest.fixture
-def clean_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in list(os.environ):
-        if key.startswith("LLM") or key in {"APP_NAME", "APP_VERSION", "DEBUG", "API_V1_PREFIX"}:
-            monkeypatch.delenv(key, raising=False)
-
-
-def test_nested_env_does_not_break_flat_settings(
-    monkeypatch: pytest.MonkeyPatch,
-    clean_llm_env: None,
-) -> None:
-    monkeypatch.setenv("APP_NAME", "custom-app")
-    monkeypatch.setenv("LLM__DEFAULT_PROFILE", "fast")
-    monkeypatch.setenv("LLM__FALLBACKS", '["smart","fast"]')
-    monkeypatch.setenv("LLM__PROFILES__FAST__API_KEY", "test-key")
-    monkeypatch.setenv("LLM__PROFILES__FAST__MODEL", "gpt-4.1-mini")
+def test_settings_has_llm_config_path() -> None:
     loaded = Settings(_env_file=None)
-    assert loaded.app_name == "custom-app"
-    assert loaded.llm.default_profile == "fast"
-    assert loaded.llm.fallbacks == ["smart", "fast"]
-    assert loaded.llm.profiles["fast"].api_key == "test-key"
-    assert loaded.llm.profiles["fast"].model == "gpt-4.1-mini"
-    assert "smart" in loaded.llm.profiles
+    assert Path(loaded.llm_config).as_posix().endswith("config/llm.yaml")
 
 
-def test_settings_allow_empty_llm_keys(clean_llm_env: None) -> None:
-    loaded = Settings(_env_file=None)
-    provider = SettingsLLMConfigProvider(loaded)
-    profiles = {item.name: item for item in provider.list_profiles()}
-    assert profiles["fast"].ready is False
-    assert profiles["smart"].ready is False
-    assert profiles["smart"].api_key == ""
+def test_yaml_store_keeps_independent_credentials(tmp_path: Path) -> None:
+    store = YamlConfigStore(tmp_path / "llm.yaml")
+    store.create_config("gpt-mini", LLMConfigItem.model_validate(SAMPLE))
+    other = {**SAMPLE, "baseurl": "https://api.deepseek.com", "apikey": "secret-two", "model": "deepseek-chat"}
+    store.create_config("deepseek-r1", LLMConfigItem.model_validate(other))
+    first = store.get_config("gpt-mini")
+    second = store.get_config("deepseek-r1")
+    assert first is not None and second is not None
+    assert first.baseurl != second.baseurl
+    assert first.apikey == "secret-one"
+    assert second.apikey == "secret-two"
 
 
-def test_factory_passes_model_timeout_and_disables_retries() -> None:
+def test_yaml_store_empty_key_not_ready(tmp_path: Path) -> None:
+    store = YamlConfigStore(tmp_path / "llm.yaml")
+    created = store.create_config("gpt-mini", LLMConfigItem.model_validate({**SAMPLE, "apikey": ""}))
+    assert created.ready is False
+
+
+def test_think_true_rejects_none_level() -> None:
+    with pytest.raises(ValidationError):
+        LLMConfigItem.model_validate({**SAMPLE, "think": True, "think_level": "none"})
+
+
+def test_factory_maps_think_to_reasoning_effort() -> None:
     factory = LangchainChatModelFactory()
-    profile = make_profile("smart", model="gpt-4.1-mini", timeout_seconds=12, temperature=0.1)
-    model = factory.create_chat_model(profile)
-    assert model.model_name == "gpt-4.1-mini"
-    assert model.request_timeout == 12
-    assert model.max_retries == 0
-    assert model.temperature == 0.1
+    config = make_config("smart", think=True, think_level="high", temperature=0.7)
+    model = factory.create_chat_model(config)
+    assert model.reasoning_effort == "high"
+    assert reasoning_effort_for(config) == "high"
+
+
+def test_update_with_apikey_replaces_secret(tmp_path: Path) -> None:
+    store = YamlConfigStore(tmp_path / "llm.yaml")
+    store.create_config("gpt-mini", LLMConfigItem.model_validate(SAMPLE))
+    item = LLMConfigItem.model_validate({**SAMPLE, "apikey": "secret-two"})
+    updated = store.update_config("gpt-mini", item)
+    assert updated.apikey == "secret-two"
+    reloaded = store.get_config("gpt-mini")
+    assert reloaded is not None
+    assert reloaded.apikey == "secret-two"
+
+
+def test_update_omits_apikey_keeps_secret(tmp_path: Path) -> None:
+    store = YamlConfigStore(tmp_path / "llm.yaml")
+    store.create_config("gpt-mini", LLMConfigItem.model_validate(SAMPLE))
+    item = LLMConfigItem.model_validate({k: v for k, v in SAMPLE.items() if k != "apikey"} | {"model": "gpt-4.1"})
+    updated = store.update_config("gpt-mini", item)
+    assert updated.model == "gpt-4.1"
+    assert updated.apikey == "secret-one"
+    assert updated.ready is True
+
+
+def test_crud_create_get_update_delete(
+    client: TestClient,
+    file_config_provider: FileLLMConfigProvider,
+) -> None:
+    created = client.post(CONFIGS_PATH, json={"name": "gpt-mini", **SAMPLE})
+    assert created.status_code == 201
+    body = created.json()
+    assert body["name"] == "gpt-mini"
+    assert body["ready"] is True
+    assert body["has_key"] is True
+    assert "apikey" not in body
+    assert "secret-one" not in created.text
+
+    listed = client.get(CONFIGS_PATH)
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+
+    detail = client.get(f"{CONFIGS_PATH}/gpt-mini")
+    assert detail.status_code == 200
+    assert detail.json()["baseurl"] == SAMPLE["baseurl"]
+    assert "apikey" not in detail.json()
+
+    duplicate = client.post(CONFIGS_PATH, json={"name": "gpt-mini", **SAMPLE})
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "config_exists"
+
+    updated = client.put(
+        f"{CONFIGS_PATH}/gpt-mini",
+        json={k: v for k, v in SAMPLE.items() if k != "apikey"} | {"model": "gpt-4.1-mini"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["model"] == "gpt-4.1-mini"
+    assert updated.json()["has_key"] is True
+
+    rotated = client.put(
+        f"{CONFIGS_PATH}/gpt-mini",
+        json={**SAMPLE, "model": "gpt-4.1-mini", "apikey": "secret-rotated"},
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["has_key"] is True
+    assert "secret-rotated" not in rotated.text
+    stored = file_config_provider.get_config("gpt-mini")
+    assert stored is not None
+    assert stored.apikey == "secret-rotated"
+
+    deleted = client.delete(f"{CONFIGS_PATH}/gpt-mini")
+    assert deleted.status_code == 204
+    missing = client.get(f"{CONFIGS_PATH}/gpt-mini")
+    assert missing.status_code == 404

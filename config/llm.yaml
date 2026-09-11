@@ -1,0 +1,26 @@
+configs:
+  gpt-mini:
+    protocol: openai
+    api: chat
+    baseurl: https://api.openai.com/v1
+    apikey: ""
+    timeout: 60
+    model: gpt-4o-mini
+    stream: false
+    think: false
+    temperature: 0.2
+    max_messages: 20
+    max_length: 8000
+  gpt-image:
+    protocol: openai
+    api: image.generate
+    baseurl: https://api.openai.com/v1
+    apikey: ""
+    timeout: 60
+    model: gpt-image-1
+    stream: false
+    size: 1024x1024
+    quality: auto
+    n: 1
+    max_messages: 20
+    max_length: 8000

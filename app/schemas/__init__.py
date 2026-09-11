@@ -1,12 +1,15 @@
-from app.schemas.demo import DemoCreate, DemoItem, DemoListResponse
-from app.schemas.health import HealthResponse
+from app.schemas.errors import ErrorDetail, ValidationErrorItem
+from app.schemas.health import HealthResponse, ReadyResponse
 from app.schemas.llm import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    ImageGenerateRequest,
+    ImageResponse,
+    LLMConfigCreateRequest,
+    LLMConfigListResponse,
+    LLMConfigPublic,
     LLMErrorBody,
-    LLMProfileItem,
-    LLMProfileListResponse,
     TokenUsage,
 )
 
@@ -14,12 +17,15 @@ __all__ = [
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
-    "DemoCreate",
-    "DemoItem",
-    "DemoListResponse",
+    "ErrorDetail",
     "HealthResponse",
+    "ImageGenerateRequest",
+    "ImageResponse",
+    "LLMConfigCreateRequest",
+    "LLMConfigListResponse",
+    "LLMConfigPublic",
     "LLMErrorBody",
-    "LLMProfileItem",
-    "LLMProfileListResponse",
+    "ReadyResponse",
     "TokenUsage",
+    "ValidationErrorItem",
 ]

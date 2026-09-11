@@ -8,7 +8,7 @@
 | 关联需求 | [REQ-2026-001-llm-access-orchestration.md](../requirements/REQ-2026-001-llm-access-orchestration.md) |
 | 关联详细设计 | [DESIGN-REQ-2026-001-llm-access-orchestration.md](../design/DESIGN-REQ-2026-001-llm-access-orchestration.md) |
 | 关联数据库设计 | 不涉及 |
-| 文档版本 | 0.1 |
+| 文档版本 | 0.4 |
 | 文档状态 | 执行中 |
 | 测试负责人 | 待指定 |
 | 测试日期 | 2026-09-11 |
@@ -16,9 +16,9 @@
 ## 2. 测试范围与依据
 
 - 测试目标：验证 LLM 档案列表、同步对话、SSE 流式对话、失败转移、配置隔离和密钥安全底线。
-- 范围内：`GET /api/v1/llm/profiles`、`POST /api/v1/llm/chat`、`POST /api/v1/llm/chat/stream`、Settings 嵌套配置、Schema 白名单、现有 `/health` 与 Demo 回归。
+- 范围内：`GET /api/v1/llm/profiles`、`POST /api/v1/llm/chat`、`POST /api/v1/llm/chat/stream`、Settings 嵌套配置、Schema 白名单、现有 `/health` 回归。Demo 回归已由 REQ-2026-002 取消。
 - 范围外：真实 GPT 计费联调（需外部密钥与网络）、结构化输出、档案 CRUD、数据库、认证权限、审计脱敏。
-- 验收依据：REQ-2026-001 AC-001～AC-029、BR-001～BR-010、DESIGN-REQ-2026-001 验证计划与 DESIGN-ITEM-002/004。
+- 验收依据：REQ-2026-001 AC-001～AC-031、BR-001～BR-011、DESIGN-REQ-2026-001 验证计划与 DESIGN-ITEM-002/004。
 
 ## 3. 测试环境与准备
 
@@ -32,7 +32,7 @@
 | 测试身份 | 公开接口，无登录 |
 | 测试数据 | 进程内假档案 `fast`/`smart`，密钥仅测试占位且不断言实值；无持久化写入 |
 
-准备要求：LLM 测试通过依赖覆盖注入假配置和假模型；`conftest` 默认拦截真实 `ChatOpenAI` 工厂。内存 Demo 在用例前后重置。不得使用生产密钥。
+准备要求：LLM 测试通过依赖覆盖注入假配置和假模型；`conftest` 默认拦截真实 `ChatOpenAI` 工厂。不得使用生产密钥。
 
 ## 4. 测试用例
 
@@ -82,26 +82,26 @@
 - 结果：通过
 - 证据/缺陷：`uv run pytest` 通过
 
-### TC-003 无密钥时健康检查与 Demo 可用
+### TC-003 无密钥时健康检查可用
 
 - 优先级：P0
 - 关联需求/验收标准：REQ-001 / AC-003；BR-003
 - 测试层级：Route
-- 目标模块与入口：`GET /health`、`GET /api/v1/demo`
-- 依赖：`test_health_and_demo_do_not_depend_on_llm_keys`、`tests/test_health.py`、`tests/test_demo.py`
+- 目标模块与入口：`GET /health`
+- 依赖：`test_health_does_not_depend_on_llm_keys`、`tests/test_health.py`
 - 前置条件：不注入 LLM 密钥
 - 输入数据：无
 - 步骤：
-  1. 访问 `/health` 和 Demo 列表。
+  1. 访问 `/health`。
 - 预期结果：
   - HTTP 状态：200
-  - 响应结构：健康检查 `status=ok`；Demo 原契约不变
-  - 数据、事务和缓存结果：Demo 内存数据按原语义
+  - 响应结构：健康检查 `status=ok`
+  - 数据、事务和缓存结果：无
   - 权限或依赖失败结果：不因缺 LLM 密钥失败
-- 清理：`reset_demo_store`
-- 实际结果：health 与 Demo 均 200
+- 清理：无
+- 实际结果：`/health` 200，`status=ok`；根路径 200
 - 结果：通过
-- 证据/缺陷：`uv run pytest` 通过
+- 证据/缺陷：`uv run pytest`：`test_health_does_not_depend_on_llm_keys`、`tests/test_health.py`
 
 ### TC-004 配置中的模型名生效
 
@@ -155,7 +155,7 @@
 - 目标模块与入口：`POST /api/v1/llm/chat`
 - 依赖：`test_chat_rejects_extra_override_fields`
 - 前置条件：档案已就绪
-- 输入数据：分别携带 `api_key` / `model` / `base_url` / `provider`
+- 输入数据：分别携带 `api_key` / `model` / `base_url` / `provider` / `think` / `think_level` / `key` / `url`
 - 步骤：
   1. 提交带覆盖字段的请求。
 - 预期结果：
@@ -475,14 +475,14 @@
 - 前置条件：无
 - 输入数据：文件内容
 - 步骤：
-  1. 读取 LLM 相关 `API_KEY` 行。
+  1. 读取 LLM 相关 `KEY` 行。
 - 预期结果：
   - HTTP 状态：不适用
   - 响应结构：不适用
   - 数据、事务和缓存结果：值为空，无 `sk-` 实值
   - 权限或依赖失败结果：不涉及
 - 清理：无
-- 实际结果：`LLM__PROFILES__*__API_KEY=` 为空
+- 实际结果：`LLM__FAST__KEY=` 与 `LLM__SMART__KEY=` 为空
 - 结果：通过
 - 证据/缺陷：`uv run pytest` 通过
 
@@ -537,7 +537,7 @@
 - 目标模块与入口：`Settings`
 - 依赖：`test_nested_env_does_not_break_flat_settings`
 - 前置条件：清理 LLM/APP 环境变量后写入 `APP_NAME` 与 `LLM__*`
-- 输入数据：`LLM__FALLBACKS=["smart","fast"]` 等
+- 输入数据：`LLM__DEFAULT=fast`、`LLM__FALLBACKS=["smart","fast"]`、`LLM__FAST__KEY` 等
 - 步骤：
   1. 实例化 `Settings(_env_file=None)`。
 - 预期结果：
@@ -598,8 +598,8 @@
 - 关联需求/验收标准：BR-007
 - 测试层级：Route
 - 目标模块与入口：`POST /api/v1/llm/chat`
-- 依赖：`test_chat_rejects_over_max_content_length`
-- 前置条件：`max_content_length=3`
+- 依赖：`test_chat_rejects_over_max_length`
+- 前置条件：`max_length=3`
 - 输入数据：`content=abcd`
 - 步骤：
   1. 提交对话。
@@ -690,6 +690,29 @@
 - 结果：未执行
 - 证据/缺陷：环境限制。隔离假上游路径已由 TC-007 覆盖。
 
+### TC-032 思考参数映射到上游
+
+- 优先级：P0
+- 关联需求/验收标准：REQ-001 / AC-030、AC-031；BR-011
+- 测试层级：配置 / 工厂
+- 目标模块与入口：`LangchainChatModelFactory`、`ChatRequest`
+- 依赖：`test_factory_maps_think_to_reasoning_effort`、`test_factory_passes_model_timeout_and_disables_retries`、`test_chat_rejects_extra_override_fields`
+- 前置条件：隔离工厂，不访问真实上游
+- 输入数据：`think=true, think_level=high`；`think=false`；请求体携带 `think`
+- 步骤：
+  1. 用思考开启档案创建 `ChatOpenAI`。
+  2. 用思考关闭档案创建 `ChatOpenAI`。
+  3. 对话请求携带 `think`/`think_level`。
+- 预期结果：
+  - HTTP 状态：覆盖字段 422
+  - 响应结构：不涉及成功体
+  - 数据、事务和缓存结果：开启时 `reasoning_effort=high` 且不传 temperature；关闭时不传 `reasoning_effort`
+  - 权限或依赖失败结果：不涉及
+- 清理：无
+- 实际结果：工厂参数符合映射；请求覆盖被拒绝
+- 结果：通过
+- 证据/缺陷：`uv run pytest` 通过
+
 ## 5. 专项检查
 
 - [x] 参数缺失、格式错误、资源不存在和非法状态。
@@ -706,7 +729,7 @@
 | --- | --- | --- | --- |
 | AC-001 | TC-001 | 通过 | pytest |
 | AC-002 | TC-002 | 通过 | pytest |
-| AC-003 | TC-003 | 通过 | pytest |
+| AC-003 | TC-003 | 通过 | pytest：仅 `/health`，Demo 已删除 |
 | AC-004 | TC-007 | 通过 | pytest |
 | AC-005 | TC-006 | 通过 | pytest |
 | AC-006 | TC-004 | 通过 | 只改配置模型名，路径不变 |
@@ -733,6 +756,8 @@
 | AC-027 | TC-022 | 通过 | pytest |
 | AC-028 | TC-007 / TC-031 | 通过 / 未执行 | 假上游通过；真实 GPT 未执行 |
 | AC-029 | TC-023 | 通过 | pytest |
+| AC-030 | TC-032 / TC-006 | 通过 | pytest |
+| AC-031 | TC-032 | 通过 | pytest |
 
 ## 7. 缺陷与汇总
 
@@ -742,8 +767,8 @@
 
 | 指标 | 数量 |
 | --- | ---: |
-| 用例总数 | 31 |
-| 通过 | 27 |
+| 用例总数 | 32 |
+| 通过 | 28 |
 | 失败 | 0 |
 | 阻塞 | 0 |
 | 不适用 | 3 |
@@ -754,10 +779,13 @@
 - 遗留风险：兼容供应商流式 chunk 形状可能不同；真实超时/限流需在有密钥环境复核
 - 数据清理结果：无持久化数据；TestClient 与依赖覆盖已在用例结束时复位
 
-> pytest 35 passed 不能替代真实 GPT 验收。存在必要真实环境用例未执行，需求保持“开发中”。
+> 当前全量 `uv run pytest` 40 passed，不能替代真实 GPT 验收。存在必要真实环境用例未执行，需求保持“开发中”。
 
 ## 8. 变更记录
 
 | 日期 | 版本 | 变更内容 | 修改人 |
 | --- | --- | --- | --- |
 | 2026-09-11 | 0.1 | 初稿并记录隔离 pytest 结果；真实 GPT 联调标记未执行。 | 待指定 |
+| 2026-09-11 | 0.2 | TC-003 去掉 Demo 回归，改由 REQ-2026-002 删除示例接口；health 用例待复核。 | 待指定 |
+| 2026-09-11 | 0.3 | 随 REQ-2026-002 回归 pytest，TC-003 仅验证 `/health`，结果通过。 | 待指定 |
+| 2026-09-11 | 0.4 | 配置字段缩短；新增 TC-032 覆盖 `think`/`think_level` 映射。 | 待指定 |
